@@ -1,0 +1,232 @@
+safeeyes (3.0.0) noble; urgency=medium
+
+  * Internal fixes for flatpak.
+
+ -- Mel Dafert <m@dafert.at>  Sun, 24 Aug 2025 10:30:00 +0000
+
+safeeyes (3.0.0b6) noble; urgency=medium
+
+  * Re-release due to broken github action
+
+ -- Mel Dafert <m@dafert.at>  Sun, 24 Aug 2025 10:30:00 +0000
+
+safeeyes (3.0.0b5) noble; urgency=medium
+
+  * Re-release due to broken github action
+
+ -- Mel Dafert <m@dafert.at>  Fri, 22 Aug 2025 19:50:00 +0000
+
+safeeyes (3.0.0b4) noble; urgency=medium
+
+  * Wayland support: break screen shortcuts, window activation, donotdisturb
+    detection
+
+  * Feature: Add option to postpone breaks by seconds rather than minutes
+
+  * Feature: screensaver: add tray action to lock screen now
+
+  * smartpause: Performance/Battery life improvements
+
+  * replace RPC server with native GTK commandline integration
+
+  * Internal refactoring to improve thread safety
+
+  * Internal: automated tests using pytest
+
+  * Internal: typechecking improvement
+
+ -- Mel Dafert <m@dafert.at>  Fri, 22 Aug 2025 11:30:00 +0000
+
+safeeyes (3.0.0b3) noble; urgency=medium
+
+  * Re-release due to broken github action
+
+ -- Mel Dafert <m@dafert.at>  Mon, 05 May 2025 13:30:00 +0000
+
+safeeyes (3.0.0b2) noble; urgency=medium
+
+  * Re-release due to broken github action
+
+ -- Mel Dafert <m@dafert.at>  Mon, 05 May 2025 12:35:00 +0000
+
+safeeyes (3.0.0b1) noble; urgency=medium
+
+  * Update to GTK4
+
+  * Improved Wayland support (keyboard locking, idle detection, window icons,
+    fullscreen)
+
+  * Internal refactoring (linting, formatting, typechecking on CI)
+
+  * Improved handling of custom user stylesheets: always fall back to internal
+    styles, with a lower priority
+
+  * Translations
+
+ -- Mel Dafert <m@dafert.at>  Mon, 05 May 2025 11:30:00 +0000
+
+safeeyes (2.2.3) jammy; urgency=medium
+
+  * Translations
+
+  * Make config and stylesheet files non-executable
+
+  * Retry loading trayicon plugin to fix races on startup
+
+  * Fix "Show next break time in tray icon" for desktops support tray icons
+    with labels
+
+  * Fix next break time in tray icon when disabling SafeEyes
+
+  * Make SafeEyes compatible with Python 3.6 again
+
+  * Add 'hyprland' to the list of recognized desktop sessions
+
+  * Remove hard dependency on X11
+
+ -- Mel Dafert <m@dafert.at>  Wed, 25 Dec 2024 11:46:00 +0000
+
+safeeyes (2.2.2) jammy; urgency=medium
+
+  * Fixed translations
+
+  * Fixed GTK startup error
+
+  * Fixed frozen break screen if safeeyes is closed right before a break
+
+  * Fixed safeeyes not working if stylesheet is missing
+
+  * Replaced "tightly close your eyes" with "gently close your eyes"
+
+ -- Archisman Panigrahi <apandada1@gmail.com>  Mon, 5 Aug 2024 18:04:23 -0400
+
+safeeyes (2.2.1) jammy; urgency=medium
+
+  * Make limit consecutive skips to default
+
+  * Add list of contributors to About page
+
+ -- Archisman Panigrahi <apandada1@gmail.com>  Sun, 14 Jul 2024 16:15:54 -0400
+
+safeeyes (2.2.0) jammy; urgency=medium
+
+  * Limit consecutive skips
+
+ -- Archisman Panigrahi <apandada1@gmail.com>  Sun, 14 Jul 2024 09:30:12 -0400
+
+safeeyes (2.1.9) noble; urgency=medium
+
+  * Fix crash in smartpause
+
+ -- Gobinath Loganathan <slgobinath@gmail.com>  Tue, 18 Jun 2024 20:25:00 -0400
+
+safeeyes (2.1.8) noble; urgency=medium
+
+  * Support Python 3.12
+
+ -- Archisman Panigrahi <apandada1@gmail.com>  Mon, 29 Apr 2024 02:09:48 -0400
+
+safeeyes (2.1.6-0) lunar; urgency=high
+  * Support Python 3.11
+
+  * Minor bug fixes
+
+  * Fix the ecd ..rror if there is no long break
+
+  * Add wayland support for do not disturb me plugin
+
+  * Fix missing icons and add random order of breaks
+
+  * Create desktop entries from the code
+
+  * Add Python 3.8 and 3.9 support
+
+  * Redesigned settings dialog
+
+  * Add tray action buttons to the break screen
+
+  * Allow long short breaks for promodo mode
+
+  * Audible alert break before and DND while on battery
+
+  * Fix no long breaks
+
+  * Fix issues with locales
+
+  * Add new command line option: --status
+
+  * Fix multi-display issue
+
+  * Fix hard coded time in notification
+  
+  * Completely redesigned architecture and user interface
+
+  * Show next break time in tray icon in supported environments
+
+  * Enable keyboard shortcuts
+
+  * Fix screen flickering in KDE
+
+  * Show the break type in the notification
+
+  * Make pyaudio optional
+
+  * Support postponing the break
+
+  * Handle configuration update efficiently
+
+  * Move to Python 3
+
+  * Add plugin support
+
+  * Add custom breaks
+
+  * Add optional break image feature
+
+  * Add lock screen support
+
+  * Prevent disabling Safe Eyes after notification
+
+  * Fix random crash
+
+  * Use system language if available
+
+  * Fix disable menu issue in Elementary OS
+
+  * Fix long breaks in hours
+
+  * Fix locale time format issue
+
+  * Advanced configurations and disable for given time
+
+  * Optional audible alert and pause Safe Eyes if system is idle
+
+  * Bug fix for no breaks after 1st one
+
+  * Add about dialog and language selection to Settings dialog
+
+  * Fixing bug in multiscreen support
+
+  * Add next break information to tray menu
+
+  * Support translation
+
+  * Adding multiscreen support & handling system suspend
+
+  * Fixing bug in Ubuntu MATE environment
+
+  * Removing apscheduler dependency
+
+  * Fixing seconds instead of minutes bug
+
+  * Bug fixes for Ubuntu 14.04 and keyboard lock during break
+
+  * Reducing minimal Python requirement
+
+  * Fixing appindicator version mismatch
+
+  * Fixing apscheduler version mismatch
+
+  * Initial release
+
+ -- Gobinath Loganathan <slgobinath@gmail.com>  Sat, 15 Oct 2016 06:28:40 +0530
