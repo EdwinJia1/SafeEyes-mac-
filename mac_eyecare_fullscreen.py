@@ -13,7 +13,46 @@ import subprocess
 import sys
 import tempfile
 import webbrowser
+import select
+import termios
+import tty
 from datetime import datetime
+
+def reset_terminal():
+    """Reset terminal to a clean state"""
+    try:
+        # First, restore terminal to canonical mode
+        try:
+            fd = sys.stdin.fileno()
+            attrs = termios.tcgetattr(fd)
+            # Enable canonical mode and echo
+            attrs[3] = attrs[3] | termios.ICANON | termios.ECHO
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+            # Flush any pending input
+            termios.tcflush(fd, termios.TCIFLUSH)
+        except:
+            pass
+
+        # Use os.system for more reliable terminal control
+        os.system('clear 2>/dev/null || cls 2>/dev/null || echo ""')
+        # Reset terminal attributes (fallback)
+        sys.stdout.write('\033[0m')  # Reset all attributes
+        sys.stdout.write('\033[H')   # Move cursor to home
+        sys.stdout.write('\033[J')   # Clear screen from cursor down
+        sys.stdout.flush()
+    except:
+        # Ultimate fallback
+        try:
+            print("\n" * 3)  # Add some spacing
+        except:
+            pass
+
+def clear_line():
+    """Clear the current line"""
+    try:
+        print('\r\033[K', end='', flush=True)  # Clear current line
+    except:
+        pass
 
 class EyeCareLanguage:
     """Language system for bilingual support"""
@@ -138,6 +177,67 @@ class EyeCareSettings:
     def set(self, key, value):
         self.settings[key] = value
         return self.save_settings()
+
+class KeyboardListener:
+    """Keyboard listener for ESC key detection with proper terminal handling"""
+
+    def __init__(self):
+        self.old_settings = None
+        self.fd = None
+        self.is_active = False
+
+    def __enter__(self):
+        try:
+            self.fd = sys.stdin.fileno()
+            self.old_settings = termios.tcgetattr(self.fd)
+            # Use cbreak mode instead of raw mode to preserve terminal state better
+            new_settings = termios.tcgetattr(self.fd)
+            new_settings[3] = new_settings[3] & ~termios.ICANON
+            new_settings[3] = new_settings[3] & ~termios.ECHO
+            new_settings[6][termios.VMIN] = 0
+            new_settings[6][termios.VTIME] = 1
+            termios.tcsetattr(self.fd, termios.TCSANOW, new_settings)
+            self.is_active = True
+            return self
+        except Exception as e:
+            # Fallback - return a non-functional listener
+            print(f"Warning: Keyboard listener not available: {e}")
+            return self
+
+    def __exit__(self, type, value, traceback):
+        try:
+            if self.is_active and self.old_settings and self.fd:
+                # Restore terminal settings properly
+                termios.tcsetattr(self.fd, termios.TCSANOW, self.old_settings)
+                # Clear any pending input
+                try:
+                    termios.tcflush(self.fd, termios.TCIFLUSH)
+                except:
+                    pass
+                # Reset terminal display using helper function
+                reset_terminal()
+        except Exception as e:
+            print(f"Warning: Could not restore terminal settings: {e}")
+            # Fallback terminal reset
+            try:
+                reset_terminal()
+            except:
+                pass
+        finally:
+            self.is_active = False
+
+    def check_for_esc(self, timeout=0.1):
+        """Check if ESC key was pressed (non-blocking)"""
+        if not self.is_active:
+            return False
+        try:
+            if select.select([self.fd], [], [], timeout) == ([self.fd], [], []):
+                c = sys.stdin.read(1)
+                if c == '\x1b':  # ESC character
+                    return True
+        except:
+            pass
+        return False
 
 class FullscreenReminderManager:
     """Fullscreen reminder display manager"""
@@ -566,42 +666,239 @@ class EyeCareReminder:
         print(f"{self.lang.get('reminder_modes')}")
         print("=" * 50)
     
-    def configure_settings(self):
-        """Interactive settings configuration"""
-        print(f"\n=== Settings Configuration ===")
+    def safe_input(self, prompt):
+        """Safe input function that handles EOF errors and ESC key"""
         try:
-            work_time = input(f"Work time in minutes (current: {self.settings.get('work_time')}): ").strip()
-            if work_time:
-                self.settings.set('work_time', int(work_time))
-            
-            break_time = input(f"Break time in seconds (current: {self.settings.get('break_time')}): ").strip()
-            if break_time:
-                self.settings.set('break_time', int(break_time))
-            
-            long_break_time = input(f"Long break time in minutes (current: {self.settings.get('long_break_time')}): ").strip()
-            if long_break_time:
-                self.settings.set('long_break_time', int(long_break_time))
-            
-            cycles = input(f"Cycles before long break (current: {self.settings.get('cycles_before_long_break')}): ").strip()
-            if cycles:
-                self.settings.set('cycles_before_long_break', int(cycles))
-            
-            language = input(f"Language [en/zh] (current: {self.settings.get('language')}): ").strip().lower()
-            if language in ['en', 'zh']:
-                self.settings.set('language', language)
-                self.lang.set_language(language)
-            
-            reminder_mode = input(f"Reminder mode [1=Dialog, 2=Fullscreen HTML, 3=Large Dialog] (current: {self.settings.get('reminder_mode')}): ").strip()
-            if reminder_mode in ['1', '2', '3']:
-                self.settings.set('reminder_mode', int(reminder_mode))
-            
-            print(f"\n{self.lang.get('settings_saved')}")
-            
-        except ValueError:
-            print("Invalid input. Settings not changed.")
+            # Ensure terminal is in canonical mode before reading input
+            try:
+                fd = sys.stdin.fileno()
+                old_settings = termios.tcgetattr(fd)
+                # Set terminal to canonical mode for input
+                new_settings = termios.tcgetattr(fd)
+                new_settings[3] = new_settings[3] | termios.ICANON | termios.ECHO
+                termios.tcsetattr(fd, termios.TCSANOW, new_settings)
+            except:
+                pass  # If terminal setup fails, try input anyway
+
+            try:
+                response = input(prompt)
+                return response.strip()
+            except EOFError:
+                # Handle EOF error - terminal might still be in wrong mode
+                print(f"\n⚠️  Input error detected. Please enter a choice between 1 and 5.")
+                return ""
         except KeyboardInterrupt:
-            print("\nSettings configuration cancelled.")
-    
+            # Handle Ctrl+C
+            print("\n❌ Operation cancelled.")
+            return None
+        except Exception as e:
+            # Handle any other errors
+            print(f"\n⚠️  Input error: {e}")
+            return ""
+
+    def configure_settings(self):
+        """Interactive settings configuration with improved error handling"""
+        print(f"\n=== {self.lang.get('app_title')} Settings Configuration ===")
+        print("Press Enter to keep current value, or type new value.")
+        print("Press Ctrl+C to cancel configuration.\n")
+
+        try:
+            # Work time configuration
+            while True:
+                work_time_input = self.safe_input(f"Work time in minutes (current: {self.settings.get('work_time')}): ")
+                if work_time_input is None:  # Ctrl+C
+                    return
+                if not work_time_input:  # Keep current value
+                    break
+                try:
+                    work_time = int(work_time_input)
+                    if work_time > 0 and work_time <= 120:
+                        self.settings.set('work_time', work_time)
+                        break
+                    else:
+                        print("Please enter a value between 1 and 120 minutes.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+            # Break time configuration
+            while True:
+                break_time_input = self.safe_input(f"Short break time in seconds (current: {self.settings.get('break_time')}): ")
+                if break_time_input is None:
+                    return
+                if not break_time_input:
+                    break
+                try:
+                    break_time = int(break_time_input)
+                    if break_time >= 10 and break_time <= 300:
+                        self.settings.set('break_time', break_time)
+                        break
+                    else:
+                        print("Please enter a value between 10 and 300 seconds.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+            # Long break time configuration
+            while True:
+                long_break_input = self.safe_input(f"Long break time in minutes (current: {self.settings.get('long_break_time')}): ")
+                if long_break_input is None:
+                    return
+                if not long_break_input:
+                    break
+                try:
+                    long_break_time = int(long_break_input)
+                    if long_break_time > 0 and long_break_time <= 30:
+                        self.settings.set('long_break_time', long_break_time)
+                        break
+                    else:
+                        print("Please enter a value between 1 and 30 minutes.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+            # Cycles configuration
+            while True:
+                cycles_input = self.safe_input(f"Cycles before long break (current: {self.settings.get('cycles_before_long_break')}): ")
+                if cycles_input is None:
+                    return
+                if not cycles_input:
+                    break
+                try:
+                    cycles = int(cycles_input)
+                    if cycles > 0 and cycles <= 10:
+                        self.settings.set('cycles_before_long_break', cycles)
+                        break
+                    else:
+                        print("Please enter a value between 1 and 10.")
+                except ValueError:
+                    print("Please enter a valid number.")
+
+            # Language configuration
+            while True:
+                language_input = self.safe_input(f"Language [en/zh] (current: {self.settings.get('language')}): ")
+                if language_input is None:
+                    return
+                if not language_input:
+                    break
+                language = language_input.strip().lower()
+                if language in ['en', 'zh']:
+                    self.settings.set('language', language)
+                    self.lang.set_language(language)
+                    break
+                else:
+                    print("Please enter 'en' for English or 'zh' for Chinese.")
+
+            # Reminder mode configuration (optional - not used in current version)
+            current_mode = self.settings.get('reminder_mode') if 'reminder_mode' in self.settings.settings else '1'
+            while True:
+                mode_input = self.safe_input(f"Reminder mode [1=Dialog, 2=Fullscreen HTML, 3=Large Dialog] (current: {current_mode}): ")
+                if mode_input is None:
+                    return
+                if not mode_input:
+                    break
+                if mode_input in ['1', '2', '3']:
+                    self.settings.set('reminder_mode', int(mode_input))
+                    break
+                else:
+                    print("Please enter 1, 2, or 3.")
+
+            print(f"\n✅ {self.lang.get('settings_saved')}")
+            self.show_settings()
+
+        except Exception as e:
+            print(f"Configuration error: {e}. Settings not changed.")
+
+    def quick_config_menu(self):
+        """Quick configuration menu with preset options"""
+        # Ensure terminal is ready for input before showing menu
+        try:
+            fd = sys.stdin.fileno()
+            attrs = termios.tcgetattr(fd)
+            # Ensure canonical mode and echo are enabled
+            attrs[3] = attrs[3] | termios.ICANON | termios.ECHO
+            termios.tcsetattr(fd, termios.TCSANOW, attrs)
+            termios.tcflush(fd, termios.TCIFLUSH)
+        except:
+            pass
+
+        print(f"\n🚀 {self.lang.get('app_title')} Quick Configuration")
+        print("=" * 50)
+        print("Choose a preset configuration:")
+        print("1. 😌 Relax Mode (30min work, 30sec break)")
+        print("2. 💪 Focus Mode (45min work, 1min break)")
+        print("3. 🏃‍♂️ Intensive Mode (25min work, 20sec break)")
+        print("4. 🎛️  Custom Configuration")
+        print("5. ❌ Exit configuration")
+        print("=" * 50)
+
+        max_attempts = 3
+        attempts = 0
+
+        while attempts < max_attempts:
+            choice = self.safe_input("\nEnter your choice (1-5): ")
+            if choice is None:
+                print("Configuration cancelled.")
+                return
+            if not choice:
+                attempts += 1
+                if attempts >= max_attempts:
+                    print("⚠️  Too many invalid inputs. Using default configuration (Relax Mode).")
+                    time.sleep(1)
+                    # Apply default settings
+                    self.settings.set('work_time', 30)
+                    self.settings.set('break_time', 30)
+                    self.settings.set('long_break_time', 10)
+                    self.settings.set('cycles_before_long_break', 2)
+                    print("✅ Relax Mode configured! Work 30min, break 30sec, long break 10min")
+                    time.sleep(1)
+                    break
+                print("⚠️  Please enter a choice between 1 and 5.")
+                continue
+
+            if choice == '1':
+                # Relax Mode
+                self.settings.set('work_time', 30)
+                self.settings.set('break_time', 30)  # 30 seconds
+                self.settings.set('long_break_time', 10)
+                self.settings.set('cycles_before_long_break', 2)
+                print("✅ Relax Mode configured! Work 30min, break 30sec, long break 10min")
+                break
+            elif choice == '2':
+                # Focus Mode
+                self.settings.set('work_time', 45)
+                self.settings.set('break_time', 60)  # 1 minute
+                self.settings.set('long_break_time', 15)
+                self.settings.set('cycles_before_long_break', 3)
+                print("✅ Focus Mode configured! Work 45min, break 1min, long break 15min")
+                break
+            elif choice == '3':
+                # Intensive Mode
+                self.settings.set('work_time', 25)
+                self.settings.set('break_time', 20)  # 20 seconds
+                self.settings.set('long_break_time', 5)
+                self.settings.set('cycles_before_long_break', 4)
+                print("✅ Intensive Mode configured! Work 25min, break 20sec, long break 5min")
+                break
+            elif choice == '4':
+                # Custom configuration
+                self.configure_settings()
+                return
+            elif choice == '5':
+                print("Configuration cancelled.")
+                return
+            else:
+                attempts += 1
+                if attempts >= max_attempts:
+                    print("⚠️  Too many invalid inputs. Using default configuration (Relax Mode).")
+                    # Apply default settings
+                    self.settings.set('work_time', 30)
+                    self.settings.set('break_time', 30)
+                    self.settings.set('long_break_time', 10)
+                    self.settings.set('cycles_before_long_break', 2)
+                    print("✅ Relax Mode configured! Work 30min, break 30sec, long break 10min")
+                    break
+                print("⚠️  Invalid choice. Please enter a number between 1 and 5.")
+
+        self.show_settings()
+
     def start_reminder(self):
         """Start the eye care reminder"""
         if self.is_running:
@@ -762,25 +1059,141 @@ def main():
     if len(sys.argv) > 1:
         if sys.argv[1] == '--start':
             app.show_settings()
+            print("\n🎯 Program started! Press ESC at any time to configure settings.")
+            print("Press Ctrl+C to stop the program.\n")
+
+            app.start_reminder()
+
+            # Main loop with ESC key detection
+            try:
+                with KeyboardListener() as kb:
+                    while app.is_running:
+                        time.sleep(0.5)  # Check for ESC every 0.5 seconds
+
+                        # Check if ESC key was pressed
+                        if kb.check_for_esc():
+                            print("\n🔧 ESC key pressed - Entering configuration...")
+                            app.stop_reminder()
+
+                            # Exit keyboard listener context to restore terminal
+                            break  # Exit the while loop to clean up terminal settings
+
+            except KeyboardInterrupt:
+                print("\n\n🛑 Program stopped by user.")
+                app.stop_reminder()
+
+            # After ESC is pressed, restore terminal and show config
+            reset_terminal()  # Ensure terminal is in clean state
+
+            # Additional terminal restoration to ensure input works
+            try:
+                fd = sys.stdin.fileno()
+                attrs = termios.tcgetattr(fd)
+                # Ensure canonical mode and echo are enabled
+                attrs[3] = attrs[3] | termios.ICANON | termios.ECHO
+                termios.tcsetattr(fd, termios.TCSANOW, attrs)
+                termios.tcflush(fd, termios.TCIFLUSH)
+            except:
+                pass
+
+            print("\n" + "="*60)  # Clear visual separation
+            print("🔧 Opening configuration menu...")
+            time.sleep(1)  # Give user time to see the message
+
+            app.quick_config_menu()
+
+            print("\n🔄 Restarting with new settings...")
+            time.sleep(1)  # Brief pause before showing settings
+            app.show_settings()
+            print("\n🎯 Program restarted! Press ESC to configure settings again.")
+            print("Press Ctrl+C to stop the program.\n")
+
+            # Restart the main loop with new settings
             app.start_reminder()
             try:
-                while app.is_running:
-                    time.sleep(1)
+                with KeyboardListener() as kb:
+                    while app.is_running:
+                        time.sleep(0.5)  # Check for ESC every 0.5 seconds
+
+                        # Check if ESC key was pressed
+                        if kb.check_for_esc():
+                            print("\n🔧 ESC key pressed - Entering configuration...")
+                            app.stop_reminder()
+                            break  # Exit to restore terminal and show config again
+
             except KeyboardInterrupt:
+                print("\n\n🛑 Program stopped by user.")
                 app.stop_reminder()
         elif sys.argv[1] == '--config':
             app.configure_settings()
         elif sys.argv[1] == '--test':
             print("Testing fullscreen reminder...")
             app._show_break_reminder(False)
+        elif sys.argv[1] == '--relax':
+            print("🌴 Starting with Relax Mode...")
+            app.settings.set('work_time', 30)
+            app.settings.set('break_time', 30)
+            app.settings.set('long_break_time', 10)
+            app.settings.set('cycles_before_long_break', 2)
+            app.show_settings()
+            app.start_reminder()
+            try:
+                while app.is_running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                app.stop_reminder()
+        elif sys.argv[1] == '--focus':
+            print("💪 Starting with Focus Mode...")
+            app.settings.set('work_time', 45)
+            app.settings.set('break_time', 60)
+            app.settings.set('long_break_time', 15)
+            app.settings.set('cycles_before_long_break', 3)
+            app.show_settings()
+            app.start_reminder()
+            try:
+                while app.is_running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                app.stop_reminder()
+        elif sys.argv[1] == '--intensive':
+            print("🏃‍♂️ Starting with Intensive Mode...")
+            app.settings.set('work_time', 25)
+            app.settings.set('break_time', 20)
+            app.settings.set('long_break_time', 5)
+            app.settings.set('cycles_before_long_break', 4)
+            app.show_settings()
+            app.start_reminder()
+            try:
+                while app.is_running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                app.stop_reminder()
         elif sys.argv[1] == '--help':
-            print("Eye Care Reminder with Fullscreen Support for macOS")
+            print("🔥 Eye Care Reminder with Fullscreen Support for macOS 🔥")
+            print("=" * 60)
             print("Usage:")
-            print("  python3 mac_eyecare_fullscreen.py           # Interactive mode")
-            print("  python3 mac_eyecare_fullscreen.py --start   # Start reminder directly")
-            print("  python3 mac_eyecare_fullscreen.py --config  # Configure settings")
-            print("  python3 mac_eyecare_fullscreen.py --test    # Test fullscreen reminder")
-            print("  python3 mac_eyecare_fullscreen.py --help    # Show this help")
+            print("  python3 mac_eyecare_fullscreen.py                    # Interactive mode")
+            print("  python3 mac_eyecare_fullscreen.py --start            # Start reminder directly")
+            print("  python3 mac_eyecare_fullscreen.py --config           # Configure settings")
+            print("  python3 mac_eyecare_fullscreen.py --test             # Test fullscreen reminder")
+            print("  python3 mac_eyecare_fullscreen.py --relax            # Start with Relax Mode")
+            print("  python3 mac_eyecare_fullscreen.py --focus            # Start with Focus Mode")
+            print("  python3 mac_eyecare_fullscreen.py --intensive        # Start with Intensive Mode")
+            print("  python3 mac_eyecare_fullscreen.py --help             # Show this help")
+            print("\n🎯 Features:")
+            print("  • Press ESC key anytime for quick configuration menu")
+            print("  • Preset modes: Relax, Focus, Intensive")
+            print("  • Fullscreen break reminders with 3 different modes")
+            print("  • Bilingual support (English/Chinese)")
+            print("  • Customizable work/break intervals")
+            print("  • Sound notifications")
+            print("\n🔧 Controls:")
+            print("  • ESC: Quick configuration menu")
+            print("  • Ctrl+C: Stop the program")
+            print("\n📋 Preset Modes:")
+            print("  • Relax Mode: 30min work, 30sec break, 10min long break")
+            print("  • Focus Mode: 45min work, 1min break, 15min long break")
+            print("  • Intensive Mode: 25min work, 20sec break, 5min long break")
         else:
             print("Unknown argument. Use --help for usage information.")
     else:
